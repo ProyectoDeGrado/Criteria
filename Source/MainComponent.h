@@ -63,11 +63,11 @@ private:
 
 #endif  // MAINCOMPONENT_H_INCLUDED
 
-class ventanamedicioncomonentes : public Component
+class ventanamedicioncomponentes : public Component
 {
 public:
 	
-	ventanamedicioncomonentes()
+	ventanamedicioncomponentes()
 	{
 		GroupComponent* groupfuente = addToList (new GroupComponent ("group", "Fuente"));
         groupfuente->setBounds (5, 5, 250, 300);
@@ -130,7 +130,7 @@ public:
 		duracionsweep->setText (TRANS("1"));
 					
 	}
-	~ventanamedicioncomonentes()
+	~ventanamedicioncomponentes()
 	{
 		deleteAndZero(botonsweep);
 		deleteAndZero(externalbtn);
@@ -187,7 +187,7 @@ public:
 	 {
 		 //setContentComponentSize(800,600);
 		
-		setContentOwned(new ventanamedicioncomonentes,false);
+		setContentOwned(new ventanamedicioncomponentes,false);
 		     Rectangle<int> area (0, 0, 260, 360);
         const RectanglePlacement placement (RectanglePlacement::xLeft+ RectanglePlacement::yTop + RectanglePlacement::doNotResize);
         Rectangle<int> result (placement.appliedTo (area, Desktop::getInstance().getDisplays().getMainDisplay().userArea.reduced (100)));

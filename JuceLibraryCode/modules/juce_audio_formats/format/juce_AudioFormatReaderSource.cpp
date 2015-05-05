@@ -21,7 +21,12 @@
 
   ==============================================================================
 */
-AudioFormatReaderSource::AudioFormatReaderSource (AudioFormatReader* const r,const bool deleteReaderWhenThisIsDeleted): reader (r, deleteReaderWhenThisIsDeleted), nextPlayPos (0), looping (false)
+
+AudioFormatReaderSource::AudioFormatReaderSource (AudioFormatReader* const r,
+                                                  const bool deleteReaderWhenThisIsDeleted)
+    : reader (r, deleteReaderWhenThisIsDeleted),
+      nextPlayPos (0),
+      looping (false)
 {
     jassert (reader != nullptr);
 }

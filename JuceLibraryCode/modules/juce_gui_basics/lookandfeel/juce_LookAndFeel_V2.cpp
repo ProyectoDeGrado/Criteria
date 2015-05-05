@@ -2587,7 +2587,7 @@ void LookAndFeel_V2::drawLevelMeter (Graphics& g, int width, int height, float l
     g.setColour (Colours::black.withAlpha (0.2f));
     g.drawRoundedRectangle (1.0f, 1.0f, width - 2.0f, height - 2.0f, 3.0f, 1.0f);
 
-    const int totalBlocks = 7;
+    const int totalBlocks = 15;
     const int numBlocks = roundToInt (totalBlocks * level);
     const float w = (width - 6.0f) / (float) totalBlocks;
 

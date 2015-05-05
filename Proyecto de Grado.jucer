@@ -20,20 +20,20 @@
                        isDebug="0" optimisation="2" targetName="Proyecto de Grado"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_core" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_events" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_graphics" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_data_structures" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_gui_basics" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_gui_extra" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_cryptography" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_video" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_opengl" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_audio_basics" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_audio_devices" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_audio_processors" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
-        <MODULEPATH id="juce_audio_utils" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
+        <MODULEPATH id="juce_core" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_events" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_graphics" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_data_structures" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_cryptography" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_video" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_opengl" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="/Applications/JUCE-OSX/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
     <VS2013 targetFolder="Builds/VisualStudio2013">
