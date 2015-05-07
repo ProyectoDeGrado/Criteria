@@ -10,6 +10,8 @@
 #define MAINCOMPONENT_H_INCLUDED
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#include "fftw3.h"
+#include <fstream>
 
 
 //==============================================================================
@@ -17,8 +19,6 @@
     This component lives inside our window, and this is where you should put all
     your controls and content.
 */
-
-
 
 class MainContentComponent   : public Component, public MenuBarModel
 {
@@ -29,15 +29,20 @@ public:
 
     void paint (Graphics&);
     void resized();
-	
-	void medwin();
-	void importar();
 	void showAudioSettings();
-
+	void medwin();
+    void ImportarWAV();
+    void normalizar(double *Signal, int Len);
+    double sumar(double *Inbuffer, int Len);
+    void encontrarTodosLosParametros();
+    double maximo(double *InSignal, int Len);
+    void filtrar(double *InDoubleA, int bandas, int Len);
+    double getValorParametroTemporal(double *EdBj, double dB1, double dB2, int Longitud); //j es la banda
+    int encontrarMuestraN(double value, double *InBuffer, int Len);
 
 	StringArray getMenuBarNames();
 	PopupMenu getMenuForIndex(int index,const String& name);
-	enum MenuIDs {medicion,import,exportar,propiedadesmed,propiedades,salir,decaimiento,senalfilt,paracus,espectrofreq};
+	enum MenuIDs {medicion,import,exportar,propiedadesmed,propiedades,salir,decaimiento,senalfilt,paracus,espectrofreq,octava,tercio};
 	void menuItemSelected(int menuID, int index);
 
 
@@ -45,15 +50,35 @@ private:
 
 	MenuBarComponent menuBar;
 	ApplicationProperties appProperties;
-	//audio setup
-	AudioFormatManager formatManager;
-    ScopedPointer<AudioFormatReaderSource> readerSource;
-    AudioDeviceManager deviceManager;
 
 	//Variables
 	ScopedPointer<AudioSampleBuffer> IRbuffer;
 	DocumentWindow *nada;
 	int LongitudT;
+
+    AudioFormatManager formatManager;
+    ScopedPointer<AudioFormatReaderSource> readerSource;
+    AudioDeviceManager deviceManager;
+    AudioTransportSource transportSource;
+    AudioSourcePlayer sourcePlayer;
+    TimeSliceThread thread;
+    
+    int Length;
+    double *IR;
+    double *IRcopy;
+    double *hFinal;
+    double **irFil;
+    int bandas;
+    double *EDT;
+    double *T10;
+    double *T20;
+    double *T30;
+    double *C50;
+    double *C80;
+    double *D50;
+    double *Ts;
+    double *STe;
+    double *STl;
 
     double sRate;
     //==============================================================================
@@ -76,8 +101,6 @@ public:
 		GroupComponent* groupgain = addToList (new GroupComponent ("group", "Nivel"));
         groupgain->setBounds (15, 150, 230, 145);
 		
-
-
 		setSize(100,100);
 		addAndMakeVisible(botonsweep=new TextButton("Interna"));
 		botonsweep->setBounds(35,40,80,25);
@@ -147,11 +170,10 @@ public:
 
 		g.setFont (juce::Font (14.0f));
 		g.drawText ("Ganancia", 100, 265, 80, 25, Justification::centredLeft, true);
-		
-		
 	}
 
 	void resized(){
+        //deviceManager.addAudioCallback(this);
 	}
 private:
 	 
@@ -172,12 +194,8 @@ private:
 	TextButton *starbtn;
 	ScopedPointer<TextEditor>duracionsweep;
 	ScopedPointer<ComboBox> LinLog;
-	
-	
-
+    
 };
-
-
 
 class ventanamedicion :public DocumentWindow
 {
