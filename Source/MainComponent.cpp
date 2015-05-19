@@ -8,11 +8,13 @@
 
 //OJO!! Commit que medio funciona, pero hay que hacerlo de todas maneras por cuestiones de backup
 //El software funciona por ahora, pero...
-//1. Error grave en la utilización de la memoria, recomiendo inicializar todas las variables en el constructor y destruirlas cada vez que se van a volver a utilizarlas. Cada vez que se ejecuta el cálculo de los parámetros
-//2. Sigue en error en ****** Leaked objects detected: 1 instance(s) of class AudioSampleBuffer JUCE Assertion failure in juce_LeakedObjectDetector.h:95
+//1. Error grave en la utilización de la memoria, recomiendo inicializar todas las variables en el constructor y destruirlas cada vez que se van a volver a utilizarlas. En getValorParametroTemporal(...).
+
 //3. Falta advertencia de cuando se cambia la frecuencia de muestro en mitad de la sesión.
-//4. Falta agregar lo de las "gráficas" que está comentariado (creo) en el algoritmo (o está en el escritorio del computador de Juan).
-//5. Actualizar el thumbnail en MainContentComponent cuando se saca IR desde Ventanamedicioncomponentes
+//4. Falta agregar lo de las gráficas, mirar cuando los parámetros dan valores negativos.
+//5. Actualizar el thumbnail en MainContentComponent cuando se saca IR desde Ventanamedicioncomponentes y calcular parámetros
+//6. Indicadores de procesos, ej. Mostrar IR, mostrar cual parámetro se esta mostrando
+//7. Guardar curvas de decaimiento en una matriz
 //Juan Londoño
 
 
@@ -806,15 +808,24 @@ const double G3[150]={0.0003793682772628410,
     0.2457644069853140000,
     0.2371218036636620000};
 
+//Bandas de frecuencias
+const String bandasF9[9]={"31.5", "63", "125", "250", "500", "1k", "2k", "4k", "8k"};
+const String bandasF10[10]={"31.5", "63", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"};
+const String bandasF29[29]={"25", "31.5","40","50","63","80","100","125","160","200","250","315","400","500","630","800","1k","1.25k","1.6k","2k","2.5k","3.15k","4k","5k","6.3k","8k","10k","12.5k","16k"};
+const String bandasF30[30]={"25", "31.5","40","50","63","80","100","125","160","200","250","315","400","500","630","800","1k","1.25k","1.6k","2k","2.5k","3.15k","4k","5k","6.3k","8k","10k","12.5k","16k","20k"};
+
 //==============================================================================
 //Valiables globales del proyecto
 static ScopedPointer<AudioDeviceManager> deviceManagerCompartido;
 
-ScopedPointer<AudioSampleBuffer> IRbuffer;
-ScopedPointer<AudioSampleBuffer> SweepBuffer;
-ScopedPointer<AudioSampleBuffer> ResBuffer;
+AudioSampleBuffer *IRbuffer;
+//AudioSampleBuffer *SweepBuffer;
+//AudioSampleBuffer *ResBuffer;
 int Length;
-ScopedPointer<double> IR;
+bool parametrosCalculados;
+double *IR;
+String verParametro;
+bool deca=false;
 
 juce::AudioDeviceManager::AudioDeviceSetup result;
 double sRate;
@@ -833,13 +844,17 @@ MainContentComponent::MainContentComponent():menuBar(this), deviceManager(MainCo
 
 
     //thread.startThread (3);
-    //deviceManager.getAudioDeviceSetup(result);
-    //sRate=result.sampleRate;
+    deviceManager.getAudioDeviceSetup(result);
+    sRate=result.sampleRate;
+    
     thread.startThread (3);
     bandas=10;
     
     deviceManager.getAudioDeviceSetup(result);
     sRate=result.sampleRate;
+        
+    inicializarPunteros("Constructor");
+    parametrosCalculados=false;
     
 }
 
@@ -852,46 +867,66 @@ MainContentComponent::~MainContentComponent(){
     
     deviceManagerCompartido=nullptr;
     
-    delete IRbuffer;
-    delete SweepBuffer;
-    delete ResBuffer;
-//
-//    delete [] IRcopy;
-//    delete [] hFinal;
-//    delete [] EDT;
-//    delete [] T10;
-//    delete [] T20;
-//    delete [] T30;
-//    delete [] C50;
-//    delete [] C80;
-//    delete [] D50;
-//    delete [] Ts;
-//    delete [] STe;
-//    delete [] STl;
-//    delete [] IR;
-
-    
+    if (IRbuffer!=NULL) {
+        IRbuffer->~AudioSampleBuffer();
+    }
+    eliminarPunteros("Destructor");
 }
-
 void MainContentComponent::paint (Graphics& g)
 {
     g.fillAll (Colours::black);
     g.setColour (Colours::white);
-    
-//    g.drawHorizontalLine(getHeight()-35, 0.0f, getWidth());
-//    for (int i=0; i<bandas; ++i) {
-//        g.drawVerticalLine(((getWidth())/bandas)*(i)+27, getHeight()-35, getHeight()-30);
-//        g.setFont (10.0f);
-//        g.drawFittedText(String(i+1)+"Hz", ((getWidth())/bandas)*(i)+25, getHeight()-25, 30, 5, false, 1);
-//    }
-//    if (T30!=nullptr) {
-//        thumbnail.clear();
-//        for (int i=0; i<bandas; ++i) {
-//            int val=maximo(T30, bandas)+1;
-//            g.drawFittedText(String(T30[i]), ((getWidth())/bandas)*(i)+25, (getHeight()-35)-((getHeight()-35)*T30[i])/val, 30, 5, false, 1);
-//        }
-//        
-//    }
+
+//============================================================================================================================
+    //Pintar parámetros
+    g.drawHorizontalLine(getHeight()-35, 0.0f, getWidth());
+    //g.drawVerticalLine(12, 0.0f, getHeight());
+    g.setFont(12.0f);
+    g.drawFittedText ("Frecuencias[Hz]", getLocalBounds(), Justification::centredBottom, 2);
+    g.setFont(10.0f);
+    for (int i=0; i<bandas; ++i) {
+        g.drawVerticalLine(((getWidth())/bandas)*(i)+27, getHeight()-35, getHeight()-30);
+        if (bandas==9) {
+            g.drawFittedText(bandasF9[i], ((getWidth())/bandas)*(i)+21, getHeight()-25, 30, 5, false, 1);
+        }else if (bandas==10){
+            g.drawFittedText(bandasF10[i], ((getWidth())/bandas)*(i)+21, getHeight()-25, 30, 5, false, 1);
+        }else if (bandas==29){
+            g.drawFittedText(bandasF29[i], ((getWidth())/bandas)*(i)+21, getHeight()-25, 30, 5, false, 1);
+        }else if (bandas==30){
+            g.drawFittedText(bandasF30[i], ((getWidth())/bandas)*(i)+21, getHeight()-25, 30, 5, false, 1);
+        }
+    }
+    if (verParametro=="T30") {
+        g.setFont (10.0f);
+        int val=maximo(T30, bandas)+1;
+        for (int i=0; i<bandas; ++i) {
+            g.drawFittedText("X", (getWidth()/bandas)*(i)+25, (getHeight()-35)-((getHeight()-35)*T30[i])/val, 30, 5, false, 1);
+            g.drawFittedText(String(std::ceil(T30[i]*1000)/1000.0), ((getWidth())/bandas)*(i)+22, (getHeight()-50)-((getHeight()-35)*T30[i])/val, 30, 5, false, 1);
+        }
+        for (int i=0; i<bandas; ++i) {
+            if (i+1<bandas) {
+                g.drawLine((getWidth()/bandas)*(i)+27, (getHeight()-33)-((getHeight()-35)*T30[i])/val, (getWidth()/bandas)*(i+1)+27, (getHeight()-33)-((getHeight()-35)*T30[i+1])/val, 2);
+            }
+            
+        }
+    }else if (verParametro=="EDT"){
+        g.setFont (10.0f);
+        int val=maximo(EDT, bandas)+1;
+        for (int i=0; i<bandas; ++i) {
+            g.drawFittedText("X", (getWidth()/bandas)*(i)+25, (getHeight()-35)-((getHeight()-35)*EDT[i])/val, 30, 5, false, 1);
+            g.drawFittedText(String(std::ceil(EDT[i]*1000)/1000.0), ((getWidth())/bandas)*(i)+22, (getHeight()-50)-((getHeight()-35)*EDT[i])/val, 30, 5, false, 1);
+        }
+        for (int i=0; i<bandas; ++i) {
+            if (i+1<bandas) {
+                g.drawLine((getWidth()/bandas)*(i)+27, (getHeight()-33)-((getHeight()-35)*EDT[i])/val, (getWidth()/bandas)*(i+1)+27, (getHeight()-33)-((getHeight()-35)*EDT[i+1])/val, 2);
+            }
+            
+        }
+    }
+
+//============================================================================================================================
+
+//============================================================================================================================
     
     if (thumbnail.getTotalLength() > 0.0){
         Rectangle<int> thumbArea(getLocalBounds());
@@ -899,7 +934,7 @@ void MainContentComponent::paint (Graphics& g)
         thumbnail.drawChannels(g, thumbArea.reduced(2), 0.0, thumbnail.getTotalLength(), 1.0f);
     }else{
         g.setFont (14.0f);
-        g.drawFittedText ("(No hay respuesta al impulso)", getLocalBounds(), Justification::centred, 2);
+        g.drawFittedText ("", getLocalBounds(), Justification::centred, 2);
     }
 }
 
@@ -911,7 +946,7 @@ void MainContentComponent::resized()
 StringArray MainContentComponent::getMenuBarNames()
 {
 	const char* menuNames[] = {
-		"Archivo", "Filtros", "Calcular", 0};
+		"Archivo", "Calcular", "Ver", 0};
 	return StringArray(menuNames);
 }
 
@@ -929,15 +964,28 @@ PopupMenu MainContentComponent::getMenuForIndex(int index, const String& name)
         
 		menu.addItem(propiedades, "Propiedades de Audio");
 		menu.addItem(salir, "Salir");
-	}else if (name == "Calcular"){
-		menu.addItem(senalfilt, "Respuesta al impulso filtrada");
-		menu.addItem(decaimiento, "Curva de Decaimiento");
-		menu.addItem(paracus, CharPointer_UTF8 ("Par\xc3\xa1metros Ac\xc3\xbasticos"));
-		menu.addItem(espectrofreq, "Espectro en frecuencia");
-    }else if (name=="Filtros"){
-        //menu.addItem(octava, "Octava",);
-        menu.addItem(octava, "Octava", true, (bandas==10)||(bandas==9));
-        menu.addItem(tercio, "Tercio", true, (bandas==30)||(bandas==29));
+	}else if (name == "Ver"){
+        
+        PopupMenu subMenuEdB;
+        subMenuEdB.addItem(decaimiento, "1kHz");
+		menu.addSubMenu("Curva de Decaimiento", subMenuEdB);
+        
+        PopupMenu subMenuPar;
+        subMenuPar.addItem(verEDT, "EDT", true, verParametro=="EDT");
+        subMenuPar.addItem(verT10, "T10");
+        subMenuPar.addItem(verT20, "T20");
+        subMenuPar.addItem(verT30, "T30", true, verParametro=="T30");
+        subMenuPar.addItem(verC50, "C50");
+        subMenuPar.addItem(verC80, "C80");
+        subMenuPar.addItem(verD50, "D50");
+        subMenuPar.addItem(verTs, "Ts");
+        subMenuPar.addItem(verSTe, "STe");
+        subMenuPar.addItem(verSTl, "STl");
+		menu.addSubMenu(CharPointer_UTF8 ("Par\xc3\xa1metros Ac\xc3\xbasticos"), subMenuPar);
+        
+    }else if (name=="Calcular"){
+        menu.addItem(octava, "Por Octava", true, (bandas==10)||(bandas==9));
+        menu.addItem(tercio, "Por Tercio", true, (bandas==30)||(bandas==29));
     }
 	return menu;
 }
@@ -949,8 +997,11 @@ void MainContentComponent::menuItemSelected(int menuID,  int index)
 		medwin();
 	}
 	else if (menuID==import)
-	{        
+	{
+        eliminarPunteros("cambioBandas");
 		ImportarWAV();
+        
+        menuItemSelected(8, 1);
 	}
 	else if (menuID==propiedades)
 	{
@@ -968,7 +1019,12 @@ void MainContentComponent::menuItemSelected(int menuID,  int index)
         }else{
             //ERROR CON LAS BANDAS, NO SE PUEDE ESTA FREQ DE MUESTREO
         }
+        eliminarPunteros("cambioBandas");
         repaint();
+        if (IR!=nullptr) {
+            encontrarTodosLosParametros();
+            transportSource.start();
+        }
     }else if (menuID==tercio){
         if (sRate==44100){
             bandas=29;
@@ -977,22 +1033,18 @@ void MainContentComponent::menuItemSelected(int menuID,  int index)
         }else{
             //ERROR CON LAS BANDAS, NO SE PUEDE ESTA FREQ DE MUESTREO
         }
+        eliminarPunteros("cambioBandas");
         repaint();
+        if (IR!=nullptr) {
+            encontrarTodosLosParametros();
+        }
     }else if (menuID==exportarIR){
         if (IR==nullptr) {
             AlertWindow::showMessageBoxAsync(AlertWindow::WarningIcon, "Error", "No se encontro ninguna respuesta al impulso");
         }else{
-            //            escribirWav(*SweepBuffer, sRate);
-            //            escribirWav(*ResBuffer, sRate);
+//            escribirWav(*SweepBuffer, sRate);
+//            escribirWav(*ResBuffer, sRate);
             escribirWav(*IRbuffer, sRate);
-        }
-
-    }else if (menuID==paracus){
-        if (IR==nullptr) {
-            AlertWindow::showMessageBoxAsync(AlertWindow::WarningIcon, "Error", "No se encontro ninguna respuesta al impulso");
-        }else{
-            encontrarTodosLosParametros();
-            //repaint();
         }
     }else if (menuID==exportarP){
         if (EDT==nullptr) {
@@ -1001,6 +1053,27 @@ void MainContentComponent::menuItemSelected(int menuID,  int index)
             exportarParametros(bandas);
         }
         
+    }else if(menuID==verT30){
+        if (T30==nullptr) {
+            AlertWindow::showMessageBoxAsync(AlertWindow::WarningIcon, "CAMBIAR MENSAJE!!", "Obtener IR para calcular par");
+        }else{
+            verParametro="T30";
+            thumbnail.clear();
+            //repaint();
+        }
+
+    }else if(menuID==verEDT){
+        if (EDT==nullptr) {
+            AlertWindow::showMessageBoxAsync(AlertWindow::WarningIcon, "CAMBIAR MENSAJE!!", "Obtener IR para calcular par");
+        }else{
+            verParametro="EDT";
+            thumbnail.clear();
+            //repaint();
+        }
+    }else if(menuID==decaimiento){
+        verParametro="Ninguno";
+        deca=true;
+        thumbnail.clear();
     }
 }
 
@@ -1033,11 +1106,16 @@ void MainContentComponent::showAudioSettings()
     deviceManager.getAudioDeviceSetup(result);
     sRate=result.sampleRate;
     
+    //No se recomienda cambiar la frecuencia de muestreo!!!
+    menuItemSelected(8, 1);
+    
 }
 
 void MainContentComponent::ImportarWAV(){
     transportSource.stop();
     transportSource.setSource (nullptr);
+    verParametro="Ninguno";
+    delete [] IR;
     FileChooser chooser ("Seleccione una respuesta al impulso",File::nonexistent, "*.wav");
     if (chooser.browseForFileToOpen()) {
         
@@ -1046,6 +1124,9 @@ void MainContentComponent::ImportarWAV(){
         AudioFormatReader* audioFormatReader = formatManager.createReaderFor(soundfile);
         readerSource = new AudioFormatReaderSource(audioFormatReader, true);
         Length=audioFormatReader->lengthInSamples;
+        if (IRbuffer!=NULL) {
+            IRbuffer->~AudioSampleBuffer();
+        }
         IRbuffer = new AudioSampleBuffer(1, Length); //Buffer donde están las muestras del .wav
         IR = new double[Length];
         IRbuffer->clear();
@@ -1055,8 +1136,6 @@ void MainContentComponent::ImportarWAV(){
             IR[i]=IRbuffer->getSample(0, i);
         }
         transportSource.setSource(readerSource, 32768, &thread, sRate, 2);
-        transportSource.start();
-        
         //Aqui se cambia la frecuencia de muestreo de la sesión a la del .wav
         juce::AudioDeviceManager::AudioDeviceSetup newAudioSetup;
         deviceManager.getAudioDeviceSetup(newAudioSetup);
@@ -1072,12 +1151,17 @@ void MainContentComponent::ImportarWAV(){
 void MainContentComponent::encontrarTodosLosParametros(){
     //IR=h (lo que en el prototipo es h, aquí es IR)
     normalizar(IR, Length);
-    IRcopy = new double[Length];
-    ScopedPointer<double> pos;
-    pos=new double[Length];
-    ScopedPointer<double> picos;
-    picos=new double[Length];
+    delete [] IRcopy;
+    delete [] pos;
+    delete [] picos;
+    delete [] env;
+    delete [] tail;
+    delete [] hFinal;
+    delete [] irFil;
     
+    IRcopy = new double[Length];
+    pos=new double[Length];
+    picos=new double[Length];
     for (int i=0; i<Length; ++i) {
         IRcopy[i]=IR[i];
         double prev=std::abs(IRcopy[i]);
@@ -1095,9 +1179,7 @@ void MainContentComponent::encontrarTodosLosParametros(){
             picos[j-1]=IRcopy[i];
         }
     }
-    ScopedPointer<double> env;
     env=new double[Length];
-    
     for (int i=0; i<(j-1) ; ++i) {
         double m=((picos[i+1])-(picos[i]))/((pos[i+1])-(pos[i]));
         double b=picos[i]-m*(pos[i]+1);
@@ -1108,7 +1190,6 @@ void MainContentComponent::encontrarTodosLosParametros(){
         }
     }
     int lc=Length*0.1;
-    ScopedPointer<double> tail;
     tail=new double[lc];
     for (int i=0; i<lc; ++i) {
         tail[i]=IR[Length-lc+i];
@@ -1134,43 +1215,45 @@ void MainContentComponent::encontrarTodosLosParametros(){
             }
         }
     }
+    
     hFinal=new double[posi-t0];
     for (int i=0; i<(posi-t0); ++i) {
         hFinal[i]=IR[t0+i];
     }
-    
-    //thumbnail.reset(1, sRate);
-    //thumbnail.addBlock(0, *IRbuffer, t0, posi-t0);
-    
-    //FILTROS
-//        if (FilterCBox->getText() == "Octava") {
-//            if (sRate==44100) {
-//                bandas=9;
-//            }else if (sRate==48000){
-//                bandas=10;
-//            }
-//        }else{
-//            if (sRate==44100) {
-//                bandas=29;
-//            }else if(sRate==48000){
-//                bandas=30;
-//            }
-//        }
-    filtrar(hFinal, bandas, posi-t0);
+    Longitud=posi-t0;
+    filtrar(hFinal, bandas, Longitud);
     
     //Tiempos
-    int Longitud=posi-t0;
+    delete [] EDT;
+    delete [] T10;
+    delete [] T20;
+    delete [] T30;
+    
     EDT=new double[bandas];
     T10=new double[bandas];
     T20=new double[bandas];
     T30=new double[bandas];
+    
+    EdBmm=new double*[bandas];
+    for (int i=0; i<bandas; ++i) {
+        EdBmm[i]=new double[Longitud];
+    }
+    
     for (int j=0; j<bandas; ++j) {
-        ScopedPointer<double> yy=new double[Longitud]; //y en prototipo
+        
+        delete [] yy;
+        delete [] y1;
+        delete [] ET;
+        delete [] h1;
+        delete [] E;
+        delete [] EdB;
+        
+        yy=new double[Longitud]; //y en prototipo
         for (int i=0; i<Longitud; ++i) {
             yy[i]=irFil[i][j];
         }
         int cola=Longitud*0.1+1;
-        ScopedPointer<double> y1=new double[cola];
+        y1=new double[cola];
         for (int i=0; i<cola; ++i) {
             y1[i]=yy[Longitud-cola+i];
         }
@@ -1182,23 +1265,24 @@ void MainContentComponent::encontrarTodosLosParametros(){
         //            for (int i=0; i<Longitud; ++i) {
         //                ycuad[i]=yy[i]*yy[i];
         //            }
-        ScopedPointer<double> ET=new double[Longitud];
+        ET=new double[Longitud];
         ET[0]=yy[0]*yy[0];
-        ScopedPointer<double> h1=new double[Longitud];
+        h1=new double[Longitud];
         for (int i=1; i<Longitud; ++i) {
             ET[i]=ET[i-1]+yy[i]*yy[i];//-std::pow(rms1, 2.0);
             //h1[i]=ET;
         }
-        ScopedPointer<double> E=new double[Longitud];
+        E=new double[Longitud];
         double max=0;
         for (int i=0; i<Longitud; ++i) {
             //h1+=yy[i]*yy[i]-(rms1*rms1);
             E[i]=ET[Longitud-1]-ET[i];
+            EdBmm[j][i]=ET[Longitud-1]-ET[i];
             if (E[i]>max) {
                 max=E[i];
             }
         }
-        ScopedPointer<double> EdB = new double[Longitud];
+        EdB=new double[Longitud];
         for (int k=0; k<Longitud; ++k) {
             EdB[k]=10*std::log10(E[k]/max);
         }
@@ -1210,18 +1294,11 @@ void MainContentComponent::encontrarTodosLosParametros(){
         //rms1=0.0;
         
         cola=0;
-        
-        //Delete o No Delete?
-//        delete [] yy;
-//        delete [] y1;
-//        delete [] ET;
-//        delete [] h1;
-//        delete [] E;
-//        delete [] EdB;
     }
     
     //Energéticos
-    ScopedPointer<double> groupdelay=new double[bandas];
+    delete [] groupdelay;
+    groupdelay=new double[bandas];
     if (bandas==9) {
         double prevdelay[9]={2000, 1000, 521, 257, 128, 64, 32, 16, 8};
         for (int i=0; i<bandas; ++i) {
@@ -1243,6 +1320,14 @@ void MainContentComponent::encontrarTodosLosParametros(){
             groupdelay[i]=prevdelay[i];
         }
     }
+    
+    delete [] C50;
+    delete [] C80;
+    delete [] D50;
+    delete [] Ts;
+    delete [] STe;
+    delete [] STl;
+    
     C50=new double[bandas];
     C80=new double[bandas];
     D50=new double[bandas];
@@ -1250,15 +1335,19 @@ void MainContentComponent::encontrarTodosLosParametros(){
     STe=new double[bandas];
     STl=new double[bandas];
     for (int j=0; j<bandas; ++j) {
-        ScopedPointer<double> yy=new double[Longitud]; //y en prototipo
+        delete [] yyE;
+        delete [] ycuadE;
+        
+        yyE=new double[Longitud]; //y en prototipo
         for (int i=0; i<Longitud; ++i) {
-            yy[i]=irFil[i][j];
+            yyE[i]=irFil[i][j];
         }
-        ScopedPointer<double> ycuadE=new double[Longitud];
+        delete [] irFil[j];
+        ycuadE=new double[Longitud];
         for (int i=0; i<Longitud; ++i) {
-            ycuadE[i]=yy[i]*yy[i];
+            ycuadE[i]=yyE[i]*yyE[i];
         }
-        double C501=0,C502=0,C801=0,C802=0,enertotal=0,Ts1=0,STe1=0,STe2=0,STl1=0;
+        double C501=0.0,C502=0.0,C801=0.0,C802=0.0,enertotal=0.0,Ts1=0.0,STe1=0.0,STe2=0.0,STl1=0.0;
         double delay=groupdelay[j];
         for (int i=0; i<Longitud; ++i) {
             if (i<=(80e-3*sRate+(delay))) {
@@ -1288,9 +1377,6 @@ void MainContentComponent::encontrarTodosLosParametros(){
         Ts[j]=1000*(Ts1/enertotal);//ms;
         STe[j]=10*std::log10(STe1/STe2);
         STl[j]=10*std::log10(STl1/STe2);
-        
-//        delete [] yy;
-//        delete [] ycuadE;
     }
     
     lc=0;
@@ -1300,13 +1386,7 @@ void MainContentComponent::encontrarTodosLosParametros(){
     rms=0.0;
     t0=0;
     posi=0;
-    Longitud=0;
-    
-//    delete [] pos;
-//    delete [] picos;
-//    delete [] env;
-//    delete [] tail;
-//    delete [] groupdelay;
+    //Longitud=0;
     
 }
 void MainContentComponent::normalizar(double *Signal, int Len){
@@ -1332,23 +1412,23 @@ double MainContentComponent::maximo(double *InSignal, int Len){
     return max;
 }
 void MainContentComponent::filtrar(double *InDoubleA, int bandas, int Len){
+    delete [] xcopia;
+    delete [] h1f;
+    delete [] y1f;
     
     int Size=Len;
     irFil=new double*[Size];
     for (int i=0; i<Size; ++i) {
         irFil[i]=new double[bandas];
     }
-    ScopedPointer<double> xcopia;
     xcopia=new double[Size];
-    ScopedPointer<double> h1;
-    h1=new double[Size];
-    ScopedPointer<double> y1;
-    y1=new double[Size];
+    h1f=new double[Size];
+    y1f=new double[Size];
     double yb[3];
     double ya[3];
     for (int k=0; k<Size; ++k) {
         xcopia[k] = InDoubleA[k];
-        h1[k] = InDoubleA[k];
+        h1f[k] = InDoubleA[k];
         if (k<3) {
             yb[k]=0;
             ya[k]=0;
@@ -1374,39 +1454,45 @@ void MainContentComponent::filtrar(double *InDoubleA, int bandas, int Len){
                 a[0]=SOS344[sistema][3];a[1]=SOS344[sistema][4];a[2]=SOS344[sistema][5];
             }
             for (int k=0; k<Size; ++k) { //"clear y"
-                y1[k]=0;
+                y1f[k]=0;
             }
-            double prev=b[0]*h1[2];
-            y1[2]=prev;
+            double prev=b[0]*h1f[2];
+            y1f[2]=prev;
             
             for (int j=2; j<Size; ++j) {
                 for (int i=0; i<3; ++i) {
-                    yb[i]=b[i]*h1[j-i];
+                    yb[i]=b[i]*h1f[j-i];
                     if (i>0) {
-                        ya[i]=-a[i]*y1[j-i];
+                        ya[i]=-a[i]*y1f[j-i];
                     }
                 }
                 prev=(yb[0]+yb[1]+yb[2])+(ya[0]+ya[1]+ya[2]);
-                y1[j]=prev;
+                y1f[j]=prev;
             }
             for (int k=0; k<Size; ++k) {
-                h1[k]=y1[k];
+                h1f[k]=y1f[k];
             }
         }
         for (int k=0; k<Size; ++k) {
-            irFil[k][sosnum-1]=h1[k];
-            h1[k]=xcopia[k];
+            irFil[k][sosnum-1]=h1f[k];
+            h1f[k]=xcopia[k];
         }
     }
-    
-//    delete [] xcopia;
-//    delete [] h1;
-//    delete [] y1;
-    
-
 }
+
+
+
 double MainContentComponent::getValorParametroTemporal(double *EdBj, double dB1, double dB2, int Longitud){
-    double *EdBabs;
+    
+    delete [] EdBabs;
+    //delete [] y30;
+    //delete [] xx;
+    //delete [] xy30;
+    //delete [] xpw2;
+    delete [] x1;
+    delete [] regresion;
+    delete [] regresionAbs;
+    
     EdBabs = new double[Longitud];
     double min5=Longitud;
     for (int k=0; k<Longitud; ++k) {
@@ -1426,14 +1512,13 @@ double MainContentComponent::getValorParametroTemporal(double *EdBj, double dB1,
         }
     }
     int t35=encontrarMuestraN(min30, EdBabs, Longitud);
-    double *y30=new double[t35-t5];
+    y30=new double[t35-t5];
     for (int i=0; i<=(t35-t5); ++i) {
-        y30[i]=EdBj[t5+i];
+        *(y30+i)=*(EdBj+t5+i);
     }
-    double *xx;
     xx=new double[t35-t5]; //x en prototipo
-    double *xy30=new double[t35-t5];
-    double *xpw2=new double[t35-t5];
+    xy30=new double[t35-t5];
+    xpw2=new double[t35-t5];
     for (int i=0; i<(t35-t5); ++i) {
         xx[i]=i+1;
         xy30[i]=xx[i]*y30[i];
@@ -1441,9 +1526,10 @@ double MainContentComponent::getValorParametroTemporal(double *EdBj, double dB1,
     }
     double m30=(sumar(xx, t35-t5)*sumar(y30, t35-t5)-((t35-t5)*sumar(xy30, t35-t5)))/((sumar(xx, t35-t5)*sumar(xx, t35-t5))-(t35-t5)*sumar(xpw2, t35-t5));
     double b30=(sumar(y30, t35-t5)-m30*sumar(xx, t35-t5))/(t35-t5);
-    double *x1=new double[Longitud+Longitud*3];
-    double *regresion=new double[Longitud+Longitud*3];
-    double *regresionAbs=new double[Longitud+Longitud*3];
+    
+    x1=new double[Longitud+Longitud*3];
+    regresion=new double[Longitud+Longitud*3];
+    regresionAbs=new double[Longitud+Longitud*3];
     
     double minRegresion=(Longitud+Longitud*3);
     for (int i=0; i <(Longitud+Longitud*3); ++i) {
@@ -1455,16 +1541,6 @@ double MainContentComponent::getValorParametroTemporal(double *EdBj, double dB1,
         }
     }
     int extrapol=encontrarMuestraN(minRegresion, regresionAbs, (Longitud+Longitud*3));
-    
-//    delete [] EdBabs;
-//    delete [] y30;
-//    delete [] xx;
-//    delete [] xy30;
-//    delete [] xpw2;
-//    delete [] x1;
-//    delete [] regresion;
-//    delete [] regresionAbs;
-    
     return extrapol/sRate;
 }
 int MainContentComponent::encontrarMuestraN(double value, double *InBuffer, int Len){
@@ -1489,16 +1565,48 @@ void MainContentComponent::exportarParametros(int band){
         direccionE.append(CharPointer_UTF8 ("Energ\xc3\xa9ticos.txt"), 50);
 
         outTxt.open(direccionT.toRawUTF8());
-        outTxt << "EDT          " << "T10          " << "T20          " << "T30          " << std::endl;
+        outTxt << "EDT[s]" << std::endl;
         for (int i=0; i<band; ++i) {
-            outTxt << EDT[i] << "         " << T10[i] << "          " << T20[i] << "          " << T30[i] << std::endl;
+            outTxt << EDT[i] << std::endl;
+        }
+        outTxt << std::endl << "T10[s]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << T10[i] << std::endl;
+        }
+        outTxt << std::endl << "T20[s]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << T20[i] << std::endl;
+        }
+        outTxt << std::endl << "T30[s]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << T30[i] << std::endl;
         }
         outTxt.close();
         
         outTxt.open(direccionE.toRawUTF8());
-        outTxt << "C50          C80         D50         Ts          STe         STl" << std::endl;
+        outTxt << "C50[dB]" << std::endl;
         for (int i=0; i<band; ++i) {
-            outTxt << C50[i] << "          " << C80[i] << "          " << D50[i] << "          " << Ts[i] << "          " << STe[i] << "          " << STl[i] << std::endl;
+            outTxt << C50[i] << std::endl;
+        }
+        outTxt << std::endl <<  "C80[dB]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << C80[i] << std::endl;
+        }
+        outTxt << std::endl << "D50[-]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << D50[i] << std::endl;
+        }
+        outTxt << std::endl << "Ts[ms]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << Ts[i] << std::endl;
+        }
+        outTxt << std::endl << "STe[dB]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << STe[i] << std::endl;
+        }
+        outTxt << std::endl << "STl[dB]" << std::endl;
+        for (int i=0; i<band; ++i) {
+            outTxt << STl[i] << std::endl;
         }
         outTxt.close();
     }
@@ -1517,7 +1625,6 @@ void MainContentComponent::escribirWav(AudioSampleBuffer &AudioBuffer, int FS){
         ScopedPointer<AudioFormatWriter> writer;
         writer = wavFormat.createWriterFor (fileStream, FS, 1, 16, StringPairArray(), 0);
         
-        
         fileStream.release(); // Se pasa la responsabilidad de borrar el stream al writerObject que ahora lo esta usando
         writer->writeFromAudioSampleBuffer(AudioBuffer, 0, AudioBuffer.getNumSamples());
         
@@ -1525,5 +1632,123 @@ void MainContentComponent::escribirWav(AudioSampleBuffer &AudioBuffer, int FS){
 //        writer=nullptr;
         
     }
+}
+
+void MainContentComponent::inicializarPunteros(String descripcion){
+    
+    if (descripcion=="Constructor") {
+        IR=nullptr;
+        IRcopy=nullptr;
+        hFinal=nullptr;
+        irFil=nullptr;
+        EdBmm=nullptr;
+        EDT=nullptr;
+        T10=nullptr;
+        T20=nullptr;
+        T30=nullptr;
+        C50=nullptr;
+        C80=nullptr;
+        D50=nullptr;
+        Ts=nullptr;
+        STe=nullptr;
+        STl=nullptr;
+    
+        //Variables
+        pos=nullptr;
+        picos=nullptr;
+        env=nullptr;
+        tail=nullptr;
+        yy=nullptr;
+        yyE=nullptr;
+        y1=nullptr;
+        ET=nullptr;
+        h1=nullptr;
+        E=nullptr;
+        EdB=nullptr;
+        groupdelay=nullptr;
+        ycuadE=nullptr;
+        xcopia=nullptr;
+        h1f=nullptr;
+        y1f=nullptr;
+        EdBabs=nullptr;
+        y30=nullptr;
+        xx=nullptr;
+        xy30=nullptr;
+        xpw2=nullptr;
+        x1=nullptr;
+        regresion=nullptr;
+        regresionAbs=nullptr;
+    }
+}
+
+void MainContentComponent::eliminarPunteros(String descripcion){
+    
+    if (descripcion=="Destructor") {
+        //Variables
+        delete [] IR;
+        delete [] IRcopy;
+        delete [] hFinal;
+        delete [] irFil;
+        delete [] EdBmm; //DELETE EdBmm!!! Hay que ver la forma de eliminarlo completamente *delete [] EdBmm[j]*
+        delete [] EDT;
+        delete [] T10;
+        delete [] T20;
+        delete [] T30;
+        delete [] C50;
+        delete [] C80;
+        delete [] D50;
+        delete [] Ts;
+        delete [] STe;
+        delete [] STl;
+        delete [] pos;
+        delete [] picos;
+        delete [] env;
+        delete [] tail;
+        delete [] yy;
+        delete [] yyE;
+        delete [] y1;
+        delete [] ET;
+        delete [] h1;
+        delete [] E;
+        delete [] EdB;
+        delete [] groupdelay;
+        delete [] ycuadE;
+        delete [] xcopia;
+        delete [] h1f;
+        delete [] y1f;
+        delete [] EdBabs;
+        delete [] y30;
+        delete [] xx;
+        delete [] xy30;
+        delete [] xpw2;
+        delete [] x1;
+        delete [] regresion;
+        delete [] regresionAbs;
+        
+    }else if (descripcion=="cambioBandas"){
+        if (EDT!=nullptr) {
+            delete [] EDT;
+            EDT=nullptr;
+            delete [] T10;
+            T10=nullptr;
+            delete [] T20;
+            T20=nullptr;
+            delete [] T30;
+            T30=nullptr;
+            delete [] C50;
+            C50=nullptr;
+            delete [] C80;
+            C80=nullptr;
+            delete [] D50;
+            D50=nullptr;
+            delete [] Ts;
+            Ts=nullptr;
+            delete [] STe;
+            STe=nullptr;
+            delete [] STl;
+            STl=nullptr;
+        }
+    }
+
 }
 

@@ -22,11 +22,12 @@
 //==============================================================================
 
 //Variables Globales del proyecto
-extern ScopedPointer<AudioSampleBuffer> IRbuffer;
-extern ScopedPointer<AudioSampleBuffer> SweepBuffer;
-extern ScopedPointer<AudioSampleBuffer> ResBuffer;
+extern AudioSampleBuffer *IRbuffer;
 extern int Length;
-extern ScopedPointer<double> IR;
+extern double *IR;
+
+const double w1=2.0 * double_Pi * 1;//Frecuencia de Inicio de Sweep
+const double w2=2.0 * double_Pi * 22000;//Frecuencia Final del Sweep
 
 extern juce::AudioDeviceManager::AudioDeviceSetup result;
 extern double sRate;
@@ -56,10 +57,12 @@ public:
     void exportarParametros(int band);
     static AudioDeviceManager& getAudioDeviceManagerCompartido();
     void escribirWav(AudioSampleBuffer &AudioBuffer, int FS);
+    void inicializarPunteros(String descripcion);
+    void eliminarPunteros(String descripcion);
     
 	StringArray getMenuBarNames();
 	PopupMenu getMenuForIndex(int index,const String& name);
-	enum MenuIDs {medicion,import,exportarIR, exportarP,propiedadesmed,propiedades,salir,decaimiento,senalfilt,paracus,espectrofreq,octava,tercio};
+	enum MenuIDs {medicion,import,exportarIR, exportarP,propiedadesmed,propiedades,salir,decaimiento,octava,tercio,verEDT, verT10, verT20, verT30, verC50,verC80, verD50, verTs, verSTe, verSTl};
 	void menuItemSelected(int menuID, int index);
     
 private:
@@ -81,6 +84,7 @@ private:
     double *IRcopy;
     double *hFinal;
     double **irFil;
+    double **EdBmm;
     int bandas;
     double *EDT;
     double *T10;
@@ -92,6 +96,34 @@ private:
     double *Ts;
     double *STe;
     double *STl;
+    
+    //Variables
+    double *pos;
+    double *picos;
+    double *env;
+    double *tail;
+    double *yy;
+    double *yyE;
+    double *y1;
+    double *ET;
+    double *h1;
+    double *E;
+    double *EdB;
+    //double *EdBcopy;
+    double *groupdelay;
+    double *ycuadE;
+    double *xcopia;
+    double *h1f;
+    double *y1f;
+    double *EdBabs;
+    double *y30;
+    double *xx;
+    double *xy30;
+    double *xpw2;
+    double *x1;
+    double *regresion;
+    double *regresionAbs;
+    int Longitud;
     
     AudioThumbnailCache thumbnailCache;
     AudioThumbnail thumbnail;
@@ -112,7 +144,7 @@ public:
 	{
 		GroupComponent *groupfuente = addToList (new GroupComponent ("group", "Fuente"));
         groupfuente->setBounds (5, 5, 250, 300);
-		GroupComponent *groupsenal = addToList (new GroupComponent ("group", "Senal"));
+		GroupComponent *groupsenal = addToList (new GroupComponent ("group", CharPointer_UTF8 ("Se\xc3\xb1""al")));
         groupsenal->setBounds (15, 20, 230, 125);
 		GroupComponent *groupgain = addToList (new GroupComponent ("group", "Nivel"));
         groupgain->setBounds (15, 150, 230, 145);
@@ -129,6 +161,7 @@ public:
 		externalbtn->setColour (TextButton::buttonColourId, Colour(216,216,216));
 		externalbtn->setConnectedEdges (Button::ConnectedOnLeft | Button::ConnectedOnRight );
         externalbtn->addListener(this);
+        externalbtn->setEnabled(false);
 
 		addAndMakeVisible(testbtn=new TextButton("Probar"));
 		testbtn->setBounds(getHeight()+50,210,70,25);
@@ -156,7 +189,7 @@ public:
 		
 		
 		addAndMakeVisible(LinLog=new ComboBox("combobox"));
-		LinLog->setBounds(110,80,100,20);
+		LinLog->setBounds(110,72,100,18);
 		LinLog->setEditableText (false);
 		LinLog->setJustificationType (Justification::centredLeft);
 		LinLog->setTextWhenNothingSelected (String::empty);
@@ -166,7 +199,7 @@ public:
 	    LinLog->setText("Logaritmico");
 	
 		addAndMakeVisible(duracionsweep = new TextEditor("Tiempo T"));
-		duracionsweep->setBounds(110,110,100,20);
+		duracionsweep->setBounds(110,94,100,18);
 		duracionsweep->setMultiLine (false);
 		duracionsweep->setReturnKeyStartsNewLine (false);
 		duracionsweep->setReadOnly (false);
@@ -176,6 +209,18 @@ public:
 		duracionsweep->setText (String::empty);
 		duracionsweep->setText (TRANS("1"));
         
+        addAndMakeVisible(duracionGrabacion = new TextEditor("RT estimado"));
+        duracionGrabacion->setBounds(110,116,100,18);
+        duracionGrabacion->setMultiLine (false);
+        duracionGrabacion->setReturnKeyStartsNewLine (false);
+        duracionGrabacion->setReadOnly (false);
+        duracionGrabacion->setScrollbarsShown (true);
+        duracionGrabacion->setCaretVisible (true);
+        duracionGrabacion->setPopupMenuEnabled (true);
+        duracionGrabacion->setText (String::empty);
+        duracionGrabacion->setText (TRANS("2"));
+        
+        deconv=false;
         definirFFT(1);
         
         deviceManager.enableInputLevelMeasurement (true);
@@ -203,16 +248,21 @@ public:
         fftw_free(y);
         fftw_free(Y);
         
+        if (SweepBuffer!=NULL) {
+            SweepBuffer->~AudioSampleBuffer();
+        }
+        if (ResBuffer!=NULL) {
+            ResBuffer->~AudioSampleBuffer();
+        }
+        
 	}
 	void paint (Graphics& g)
 	{
 		g.setFont (juce::Font (14.0f));
-		g.drawText ("Tipo:", 30, 79, 30, 25, Justification::centred, true);
-
-		g.setFont (juce::Font (14.0f));
-		g.drawText ("Duracion[s]:", 30, 109, 80, 25, Justification::centredLeft, true);
-
-		g.setFont (juce::Font (14.0f));
+		g.drawText ("Tipo:", 30, 72, 30, 25, Justification::centred, true);
+		g.drawText (CharPointer_UTF8 ("Duraci\xc3\xb3nS[s]:"), 30, 92, 80, 25, Justification::centredLeft, true);
+        g.drawText ("RT estimado[s]:", 30, 112, 80, 25, Justification::centredLeft, true);
+        
 		g.drawText ("Ganancia", 100, 265, 80, 25, Justification::centredLeft, true);
         
         Rectangle<int> areaMedidor (100, 100, 50, 20);
@@ -220,7 +270,7 @@ public:
 //        Rectangle<int> result (placement.appliedTo (areaMedidor, Desktop::getInstance().getDisplays().getMainDisplay().userArea.reduced (100)));
 //        setBounds (result);
         
-        getLookAndFeel().drawLevelMeter (g, 100, 50, (float) exp (log (level) / 3.0));
+        //getLookAndFeel().drawLevelMeter (g, 100, 50, (float) exp (log (level) / 3.0));
 	}
 
 	void resized(){
@@ -245,10 +295,9 @@ public:
                 t=0.0;
                 scount=0;
                 SweepSize = T*sRate;
-                fftSize=(1.5)*SweepSize;
+                fftSize=(2)*SweepSize;
                 
                 definirFFT(fftSize);
-                
                 //        deviceManager.getAudioDeviceSetup(result);
                 //        sRate=result.sampleRate;
                 
@@ -284,7 +333,7 @@ public:
         }else if (buttonThatWasClicked==pararCallback){
             testbtn->setEnabled(true);
             botonsweep->setEnabled(true);
-            externalbtn->setEnabled(true);
+            //externalbtn->setEnabled(true);//función desactivada por ahora
             LinLog->setEnabled(true);
             gainsweep.setEnabled(true);
             startbtn->setEnabled(true);
@@ -305,8 +354,8 @@ public:
     
     
     void audioDeviceIOCallback(const float** inputData,int InputChannels,float** outputData,int OutputChannels,int numSamples){
-        const AudioSampleBuffer RespBuffer (const_cast<float**> (inputData), 1, numSamples);
-        const AudioSampleBuffer SweepBuffer (const_cast<float**> (outputData), 1, numSamples);
+        const AudioSampleBuffer RespBuff (const_cast<float**> (inputData), 1, numSamples);
+        const AudioSampleBuffer SweepBuff (const_cast<float**> (outputData), 1, numSamples);
         const float originalt = t;
         for(int i = 0; i < OutputChannels; i++){
             t = originalt;
@@ -322,8 +371,8 @@ public:
                 outputData[i][j]=amplitude*std::sin(phase);
                 if (startbtn->getButtonText()==CharPointer_UTF8 ("Parar Medici\xc3\xb3n")) {
                     if ((scount+j)<fftSize) {
-                        x[scount+j][0]=SweepBuffer.getSample(0, j);
-                        y[scount+j][0]=RespBuffer.getSample(0, j);
+                        x[scount+j][0]=SweepBuff.getSample(0, j);
+                        y[scount+j][0]=RespBuff.getSample(0, j);
                     }else{
                         deconv=true;
                         pararCallback->triggerClick();
@@ -381,6 +430,7 @@ public:
         IRbuffer->clear();
         ResBuffer = new AudioSampleBuffer(1,fftSize);
         ResBuffer->clear();
+        delete [] IR;
         IR=new double[Length];
 //        Sweep=new double[Length];
 //        Respuesta=new double[fftSize];
@@ -430,20 +480,22 @@ private:
 	TextButton *testbtn;
 	TextButton *startbtn;
     TextButton *pararCallback;
-	ScopedPointer<TextEditor>duracionsweep;
+	ScopedPointer<TextEditor> duracionsweep;
+    ScopedPointer<TextEditor> duracionGrabacion;
 	ScopedPointer<ComboBox> LinLog;
     
     int fftSize;
     int scount;
     int SweepSize;
     
-    const double w1=2.0 * double_Pi *20;//Frecuencia de Inicio de Sweep
-    const double w2=2.0 * double_Pi *20000;//Frecuencia Final del Sweep
     double t; //Vector de Tiempo
     double amplitude;
     double phase; //Argumento para sin(ph)
     double T; //Duración del sweep
-    bool deconv=false;
+    bool deconv;
+    
+    AudioSampleBuffer *SweepBuffer;
+    AudioSampleBuffer *ResBuffer;
     
     fftw_complex *x, *X, *y, *Y, *h, *H;
     fftw_plan transformadaX;
