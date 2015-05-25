@@ -51,6 +51,7 @@ public:
     double sumar(double *Inbuffer, int Len);
     void encontrarTodosLosParametros();
     double maximo(double *InSignal, int Len);
+    double minimo(double *InSignal, int Len);
     void filtrar(double *InDoubleA, int bandas, int Len);
     double getValorParametroTemporal(double *EdBj, double dB1, double dB2, int Longitud); //j es la banda
     int encontrarMuestraN(double value, double *InBuffer, int Len);
@@ -62,7 +63,7 @@ public:
     
 	StringArray getMenuBarNames();
 	PopupMenu getMenuForIndex(int index,const String& name);
-	enum MenuIDs {medicion,import,exportarIR, exportarP,propiedadesmed,propiedades,salir,decaimiento,octava,tercio,verEDT, verT10, verT20, verT30, verC50,verC80, verD50, verTs, verSTe, verSTl};
+	enum MenuIDs {medicion,import,exportarIR, exportarP,propiedadesmed,propiedades,salir,decaimiento,octava,tercio,verEDT, verT10, verT20, verT30, verC50,verC80, verD50, verTs, verSTe, verSTl, formaOnda};
 	void menuItemSelected(int menuID, int index);
     
 private:
@@ -84,7 +85,7 @@ private:
     double *IRcopy;
     double *hFinal;
     double **irFil;
-    double **EdBmm;
+    //double **EdBmm;
     int bandas;
     double *EDT;
     double *T10;
@@ -127,7 +128,7 @@ private:
     
     AudioThumbnailCache thumbnailCache;
     AudioThumbnail thumbnail;
-    
+    //float level;
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainContentComponent)
 };
@@ -144,19 +145,20 @@ public:
 	{
 		GroupComponent *groupfuente = addToList (new GroupComponent ("group", "Fuente"));
         groupfuente->setBounds (5, 5, 250, 300);
-		GroupComponent *groupsenal = addToList (new GroupComponent ("group", CharPointer_UTF8 ("Se\xc3\xb1""al")));
+		GroupComponent *groupsenal = addToList (new GroupComponent ("group", "Barrido/Sweep"));
         groupsenal->setBounds (15, 20, 230, 125);
 		GroupComponent *groupgain = addToList (new GroupComponent ("group", "Nivel"));
         groupgain->setBounds (15, 150, 230, 145);
 		
 		setSize(100,100);
-		addAndMakeVisible(botonsweep=new TextButton("Interna"));
+    
+		addAndMakeVisible(botonsweep=new TextButton("Interno"));
 		botonsweep->setBounds(35,40,80,25);
 		botonsweep->setColour (TextButton::buttonColourId, Colour(216,216,216));
 		botonsweep->setConnectedEdges (Button::ConnectedOnLeft | Button::ConnectedOnRight);
         botonsweep->addListener(this);
 		
-		addAndMakeVisible(externalbtn=new TextButton("Externa"));
+		addAndMakeVisible(externalbtn=new TextButton("Externo"));
 		externalbtn->setBounds(145,40,80,25);
 		externalbtn->setColour (TextButton::buttonColourId, Colour(216,216,216));
 		externalbtn->setConnectedEdges (Button::ConnectedOnLeft | Button::ConnectedOnRight );
@@ -176,8 +178,10 @@ public:
         startbtn->addListener(this);
         
         pararCallback=new TextButton("quitarCallback");
+        pararCallback->setBounds(getHeight()-35,200,12,30);
+        pararCallback->setColour (TextButton::buttonColourId, Colour(183,183,183));
+        pararCallback->setConnectedEdges (Button::ConnectedOnLeft | Button::ConnectedOnRight);
         pararCallback->addListener(this);
-        
         
 		addAndMakeVisible(gainsweep);
 		gainsweep.setBounds(100,160,60,110);
@@ -214,14 +218,12 @@ public:
         duracionGrabacion->setMultiLine (false);
         duracionGrabacion->setReturnKeyStartsNewLine (false);
         duracionGrabacion->setReadOnly (false);
-        duracionGrabacion->setScrollbarsShown (true);
-        duracionGrabacion->setCaretVisible (true);
-        duracionGrabacion->setPopupMenuEnabled (true);
-        duracionGrabacion->setText (String::empty);
         duracionGrabacion->setText (TRANS("2"));
         
         deconv=false;
         definirFFT(1);
+        SweepBuffer=new AudioSampleBuffer(1,1);
+        ResBuffer=new AudioSampleBuffer(1,1);
         
         deviceManager.enableInputLevelMeasurement (true);
         startTimer (50); //Timer para el medidor
@@ -248,33 +250,47 @@ public:
         fftw_free(y);
         fftw_free(Y);
         
-        if (SweepBuffer!=NULL) {
-            SweepBuffer->~AudioSampleBuffer();
-        }
-        if (ResBuffer!=NULL) {
-            ResBuffer->~AudioSampleBuffer();
-        }
+        SweepBuffer->~AudioSampleBuffer();
+        ResBuffer->~AudioSampleBuffer();
         
 	}
 	void paint (Graphics& g)
 	{
-		g.setFont (juce::Font (14.0f));
-		g.drawText ("Tipo:", 30, 72, 30, 25, Justification::centred, true);
-		g.drawText (CharPointer_UTF8 ("Duraci\xc3\xb3nS[s]:"), 30, 92, 80, 25, Justification::centredLeft, true);
-        g.drawText ("RT estimado[s]:", 30, 112, 80, 25, Justification::centredLeft, true);
-        
+		g.setFont (juce::Font (12.0f));
+		g.drawText ("Tipo", 30, 72, 30, 25, Justification::centred, true);
+		g.drawText (CharPointer_UTF8 ("Duraci\xc3\xb3n[s]:"), 30, 92, 80, 25, Justification::centredLeft, true);
+        //g.drawText ("RT estimado[s]:", 30, 112, 80, 25, Justification::centredLeft, true);
+
 		g.drawText ("Ganancia", 100, 265, 80, 25, Justification::centredLeft, true);
-        
-        Rectangle<int> areaMedidor (100, 100, 50, 20);
-//        const RectanglePlacement placementMedidor (RectanglePlacement::xLeft+ RectanglePlacement::yTop + RectanglePlacement::doNotResize);
-//        Rectangle<int> result (placement.appliedTo (areaMedidor, Desktop::getInstance().getDisplays().getMainDisplay().userArea.reduced (100)));
-//        setBounds (result);
-        
-        //getLookAndFeel().drawLevelMeter (g, 100, 50, (float) exp (log (level) / 3.0));
+        g.setOrigin(50, 209);
+        getLookAndFeel().drawLevelMeter(g, 50, 25, (float) exp (log (level) / 3.0));
 	}
 
 	void resized(){
 	}
+    
+    void escribirWav(AudioSampleBuffer &AudioBuffer, int FS){
+        
+        FileChooser chooser ("Guardar Respuesta al Impulso (IR)",File::nonexistent, "*.wav");
+        if (chooser.browseForFileToSave(true)) {
+            File file (chooser.getResult());
+            file.deleteFile();
+            ScopedPointer<FileOutputStream> fileStream (file.createOutputStream());
+            
+            WavAudioFormat wavFormat;
+            ScopedPointer<AudioFormatWriter> writer;
+            writer = wavFormat.createWriterFor (fileStream, FS, 1, 16, StringPairArray(), 0);
+            
+            fileStream.release(); // Se pasa la responsabilidad de borrar el stream al writerObject que ahora lo esta usando
+            writer->writeFromAudioSampleBuffer(AudioBuffer, 0, AudioBuffer.getNumSamples());
+            
+            
+            //        delete writer;
+            //        writer=nullptr;
+            
+        }
+    }
+    
     void buttonClicked(Button* buttonThatWasClicked){
         if (buttonThatWasClicked==startbtn) {
             if (startbtn->getButtonText()==CharPointer_UTF8 ("Iniciar Medici\xc3\xb3n")) {
@@ -287,7 +303,8 @@ public:
                 duracionsweep->setEnabled(false);
                 deconv=false;
                 amplitude=gainsweep.getValue();
-                T=duracionsweep->getText().getFloatValue();
+                T=duracionsweep->getText().getDoubleValue();
+                RTestimado=duracionGrabacion->getText().getDoubleValue();
                 
                 deviceManager.getAudioDeviceSetup(result);
                 sRate=result.sampleRate;
@@ -295,7 +312,7 @@ public:
                 t=0.0;
                 scount=0;
                 SweepSize = T*sRate;
-                fftSize=(2)*SweepSize;
+                fftSize=SweepSize+1.11*RTestimado*sRate;
                 
                 definirFFT(fftSize);
                 //        deviceManager.getAudioDeviceSetup(result);
@@ -341,17 +358,16 @@ public:
             
             amplitude=0.0;
             if (startbtn->getButtonText()==CharPointer_UTF8 ("Parar Medici\xc3\xb3n")) {
-                startbtn->setButtonText(CharPointer_UTF8 ("Iniciar Medici\xc3\xb3n"));
+                startbtn->setButtonText(CharPointer_UTF8("Iniciar Medici\xc3\xb3n")); //Estas mirando por que hay error en UTF8, Commit
                 if (deconv) {
                     deconvolucion();
+                    escribirWav(*IRbuffer, sRate);
                 }
             }else if (testbtn->getButtonText()=="Parar"){
                 testbtn->setButtonText("Probar");
             }
         }
-
     }
-    
     
     void audioDeviceIOCallback(const float** inputData,int InputChannels,float** outputData,int OutputChannels,int numSamples){
         const AudioSampleBuffer RespBuff (const_cast<float**> (inputData), 1, numSamples);
@@ -422,8 +438,11 @@ public:
             H[k][1]=(100/a)*(Y[k][1]*X[k][0]-Y[k][0]*X[k][1]);
         }
         fftw_execute(transformadah);
-        
         Length=(fftSize-SweepSize);
+        
+        SweepBuffer->~AudioSampleBuffer();
+        ResBuffer->~AudioSampleBuffer();
+        
         SweepBuffer= new AudioSampleBuffer(1,Length);
         SweepBuffer->clear();
         IRbuffer = new AudioSampleBuffer(1,Length);
@@ -492,6 +511,7 @@ private:
     double amplitude;
     double phase; //Argumento para sin(ph)
     double T; //Duración del sweep
+    double RTestimado;
     bool deconv;
     
     AudioSampleBuffer *SweepBuffer;
@@ -504,7 +524,6 @@ private:
     bool senalExterna;
     
     float level;
-    
 };
 
 class ventanamedicion :public DocumentWindow
@@ -514,7 +533,6 @@ public:
         : DocumentWindow (name, backgroundColour, buttonsNeeded)
 	 {
 		 //setContentComponentSize(800,600);
-		
 		setContentOwned(new ventanamedicioncomponentes,false);
 		     Rectangle<int> area (0, 0, 260, 360);
         const RectanglePlacement placement (RectanglePlacement::xLeft+ RectanglePlacement::yTop + RectanglePlacement::doNotResize);
