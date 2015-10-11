@@ -34,6 +34,7 @@
         <MODULEPATH id="juce_audio_formats" path="/Applications/JUCE-OSX/modules"/>
         <MODULEPATH id="juce_audio_processors" path="/Applications/JUCE-OSX/modules"/>
         <MODULEPATH id="juce_audio_utils" path="/Applications/JUCE-OSX/modules"/>
+        <MODULEPATH id="dRowAudio" path="../../../../Applications/JUCE-OSX/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
     <VS2013 targetFolder="Builds/VisualStudio2013">
@@ -58,6 +59,7 @@
         <MODULEPATH id="juce_audio_formats" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
         <MODULEPATH id="juce_audio_processors" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
         <MODULEPATH id="juce_audio_utils" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
+        <MODULEPATH id="dRowAudio" path="../../../../Applications/JUCE-OSX/modules"/>
       </MODULEPATHS>
     </VS2013>
     <VS2012 targetFolder="Builds/VisualStudio2012">
@@ -82,10 +84,12 @@
         <MODULEPATH id="juce_audio_formats" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
         <MODULEPATH id="juce_audio_processors" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
         <MODULEPATH id="juce_audio_utils" path="D:/INFO ALEJO/torrent/JUCE-WINDOWS/modules"/>
+        <MODULEPATH id="dRowAudio" path="../../../../Applications/JUCE-OSX/modules"/>
       </MODULEPATHS>
     </VS2012>
   </EXPORTFORMATS>
   <MODULES>
+    <MODULES id="dRowAudio" showAllCode="1" useLocalCopy="1"/>
     <MODULES id="juce_audio_basics" showAllCode="1" useLocalCopy="1"/>
     <MODULES id="juce_audio_devices" showAllCode="1" useLocalCopy="1"/>
     <MODULES id="juce_audio_formats" showAllCode="1" useLocalCopy="1"/>
@@ -101,5 +105,6 @@
     <MODULES id="juce_opengl" showAllCode="1" useLocalCopy="1"/>
     <MODULES id="juce_video" showAllCode="1" useLocalCopy="1"/>
   </MODULES>
-  <JUCEOPTIONS/>
+  <JUCEOPTIONS DROWAUDIO_USE_FFTREAL="disabled" DROWAUDIO_USE_SOUNDTOUCH="disabled"
+               DROWAUDIO_USE_CURL="disabled"/>
 </JUCERPROJECT>
